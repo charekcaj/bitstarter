@@ -2,8 +2,9 @@ var express = require('express');
 
 var app = express.createServer(express.logger());
 
-app.get('/', function(request, response) {
-  response.send(buffer.toString(new Buffer(fs.readFile(index.html))));
+app.get('/', function(request, response) 
+  var buffer = new Buffer(fs.readFile(index.html));{
+  response.send(buffer.toString());
 });
 
 var port = process.env.PORT || 5000;
