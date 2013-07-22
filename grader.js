@@ -24,8 +24,10 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var rest = require('restler');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -36,6 +38,29 @@ var assertFileExists = function(infile) {
     return instr;
 };
 
+// Checks to see if the file infile exists. If so, the returns file name. If not, then error.
+var assertFileExists = function(infile) {
+    var instr = infile.toString();
+    if(!fs.existsSync(instr)) {
+        console.log("%s does not exist. Exiting.", instr);
+        process.exit(1); // http://nodejs.org/api/process.html#process_process_exit_code
+    }
+    return instr;
+};
+
+// Checks to see if the given URL exists. If so, then return URL as string. If not, then error.
+var assertURLExists = function(url) {
+  var urlstr = url.toString();
+  rest.get(urlstr).on('complete', function(result) {
+    if (result instanceof Error) {
+      console.log('Error: ' + result.message);
+      this.retry(5000); // try again after 5 sec
+    }
+  });
+  return urlstr;
+}
+
+
 var cheerioHtmlFile = function(htmlfile) {
     return cheerio.load(fs.readFileSync(htmlfile));
 };
@@ -44,8 +69,14 @@ var loadChecks = function(checksfile) {
     return JSON.parse(fs.readFileSync(checksfile));
 };
 
-var checkHtmlFile = function(htmlfile, checksfile) {
-    $ = cheerioHtmlFile(htmlfile);
+var checkHTML = function(html, checksfile) {
+    if (html == "index.html") {
+        $ = cheerioHtmlFile(html);
+    }
+    else {
+        $ = cheerio.load(html);
+        console.log($);
+    }
     var checks = loadChecks(checksfile).sort();
     var out = {};
     for(var ii in checks) {
@@ -55,21 +86,37 @@ var checkHtmlFile = function(htmlfile, checksfile) {
     return out;
 };
 
+
 var clone = function(fn) {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
     return fn.bind({});
 };
 
+
 if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <url>', 'URL to check', clone(assertURLExists))
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
-} else {
-    exports.checkHtmlFile = checkHtmlFile;
+
+    if (program.file) {
+        var checkJson = checkHTML(program.file, program.checks);
+        var outJson = JSON.stringify(checkJson, null, 4);
+        console.log(outJson);
+    }
+   
+    else if (program.url) {
+            rest.get(program.url).on('complete', function(result) {
+                var checkJson = checkHTML(result, program.checks);
+                var outJson = JSON.stringify(checkJson, null, 4);
+                console.log(outJson);
+        });
+    }
+
 }
 
+else {
+    exports.checkHtml = checkHtml;
+}
